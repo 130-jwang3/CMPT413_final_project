@@ -1,0 +1,10 @@
+dataset_name: 'NASA-SMAP'
+data_id_list:  []
+refined: False
+balanced: False
+ratio: 1
+
+processed_data_path: 'C:\\Users\\johnw\\Documents\\TSAD\\TAMA\\output'
+# processed_data_path: '/home/ysc/workspace/VisualTimeSeries/output/test-1-300'
+# log_save_path: '/home/ysc/workspace/VisualTimeSeries/output/log'
+log_save_path: 'C:\\Users\\johnw\\Documents\\TSAD\\TAMA\\log'
