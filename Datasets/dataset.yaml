@@ -1,0 +1,902 @@
+Dodgers:
+  background: ''
+  file_list:
+    data:
+      labels:
+      - 15120
+      - 1
+      test:
+      - 15120
+      - 1
+      train:
+      - 35280
+      - 1
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/Dodgers
+  type: centralized
+FTSD:
+  background: ''
+  file_list: {}
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/FTSD
+  type: distributed
+MBA:
+  background: ''
+  file_list:
+    data:
+      labels:
+      - 7680
+      - 1
+      test:
+      - 7680
+      - 2
+      train:
+      - 7680
+      - 2
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/MBA
+  type: centralized
+MSDS:
+  background: ''
+  file_list: {}
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/MSDS
+  type: distributed
+NAB:
+  background: ''
+  file_list: {}
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/NAB
+  type: distributed
+SMAP_MSL:
+  background: ''
+  file_list:
+    A-1:
+      labels:
+      - 8640
+      test:
+      - 8640
+      - 25
+      train:
+      - 2880
+      - 25
+    A-2:
+      labels:
+      - 7914
+      test:
+      - 7914
+      - 25
+      train:
+      - 2648
+      - 25
+    A-3:
+      labels:
+      - 8205
+      test:
+      - 8205
+      - 25
+      train:
+      - 2736
+      - 25
+    A-4:
+      labels:
+      - 8080
+      test:
+      - 8080
+      - 25
+      train:
+      - 2690
+      - 25
+    A-5:
+      labels:
+      - 4693
+      test:
+      - 4693
+      - 25
+      train:
+      - 705
+      - 25
+    A-6:
+      labels:
+      - 4453
+      test:
+      - 4453
+      - 25
+      train:
+      - 682
+      - 25
+    A-7:
+      labels:
+      - 8631
+      test:
+      - 8631
+      - 25
+      train:
+      - 2879
+      - 25
+    A-8:
+      labels:
+      - 8375
+      test:
+      - 8375
+      - 25
+      train:
+      - 762
+      - 25
+    A-9:
+      labels:
+      - 8434
+      test:
+      - 8434
+      - 25
+      train:
+      - 762
+      - 25
+    B-1:
+      labels:
+      - 8044
+      test:
+      - 8044
+      - 25
+      train:
+      - 2435
+      - 25
+    C-1:
+      labels:
+      - 2264
+      test:
+      - 2264
+      - 55
+      train:
+      - 2158
+      - 55
+    C-2:
+      labels:
+      - 2051
+      test:
+      - 2051
+      - 55
+      train:
+      - 764
+      - 55
+    D-1:
+      labels:
+      - 8509
+      test:
+      - 8509
+      - 25
+      train:
+      - 2849
+      - 25
+    D-11:
+      labels:
+      - 7431
+      test:
+      - 7431
+      - 25
+      train:
+      - 2611
+      - 25
+    D-12:
+      labels:
+      - 7918
+      test:
+      - 7918
+      - 25
+      train:
+      - 312
+      - 25
+    D-13:
+      labels:
+      - 7663
+      test:
+      - 7663
+      - 25
+      train:
+      - 1490
+      - 25
+    D-14:
+      labels:
+      - 2625
+      test:
+      - 2625
+      - 55
+      train:
+      - 3675
+      - 55
+    D-15:
+      labels:
+      - 2158
+      test:
+      - 2158
+      - 55
+      train:
+      - 2074
+      - 55
+    D-16:
+      labels:
+      - 2191
+      test:
+      - 2191
+      - 55
+      train:
+      - 1451
+      - 55
+    D-2:
+      labels:
+      - 8595
+      test:
+      - 8595
+      - 25
+      train:
+      - 2880
+      - 25
+    D-3:
+      labels:
+      - 8640
+      test:
+      - 8640
+      - 25
+      train:
+      - 2880
+      - 25
+    D-4:
+      labels:
+      - 8473
+      test:
+      - 8473
+      - 25
+      train:
+      - 2833
+      - 25
+    D-5:
+      labels:
+      - 7628
+      test:
+      - 7628
+      - 25
+      train:
+      - 2561
+      - 25
+    D-6:
+      labels:
+      - 7884
+      test:
+      - 7884
+      - 25
+      train:
+      - 2594
+      - 25
+    D-7:
+      labels:
+      - 7642
+      test:
+      - 7642
+      - 25
+      train:
+      - 2583
+      - 25
+    D-8:
+      labels:
+      - 7874
+      test:
+      - 7874
+      - 25
+      train:
+      - 2602
+      - 25
+    D-9:
+      labels:
+      - 7406
+      test:
+      - 7406
+      - 25
+      train:
+      - 2583
+      - 25
+    E-1:
+      labels:
+      - 8516
+      test:
+      - 8516
+      - 25
+      train:
+      - 2880
+      - 25
+    E-10:
+      labels:
+      - 8505
+      test:
+      - 8505
+      - 25
+      train:
+      - 2880
+      - 25
+    E-11:
+      labels:
+      - 8514
+      test:
+      - 8514
+      - 25
+      train:
+      - 2880
+      - 25
+    E-12:
+      labels:
+      - 8512
+      test:
+      - 8512
+      - 25
+      train:
+      - 2880
+      - 25
+    E-13:
+      labels:
+      - 8640
+      test:
+      - 8640
+      - 25
+      train:
+      - 2880
+      - 25
+    E-2:
+      labels:
+      - 8532
+      test:
+      - 8532
+      - 25
+      train:
+      - 2880
+      - 25
+    E-3:
+      labels:
+      - 8307
+      test:
+      - 8307
+      - 25
+      train:
+      - 2880
+      - 25
+    E-4:
+      labels:
+      - 8354
+      test:
+      - 8354
+      - 25
+      train:
+      - 2880
+      - 25
+    E-5:
+      labels:
+      - 8294
+      test:
+      - 8294
+      - 25
+      train:
+      - 2880
+      - 25
+    E-6:
+      labels:
+      - 8300
+      test:
+      - 8300
+      - 25
+      train:
+      - 2880
+      - 25
+    E-7:
+      labels:
+      - 8310
+      test:
+      - 8310
+      - 25
+      train:
+      - 2769
+      - 25
+    E-8:
+      labels:
+      - 8532
+      test:
+      - 8532
+      - 25
+      train:
+      - 2880
+      - 25
+    E-9:
+      labels:
+      - 8302
+      test:
+      - 8302
+      - 25
+      train:
+      - 2880
+      - 25
+    F-1:
+      labels:
+      - 8584
+      test:
+      - 8584
+      - 25
+      train:
+      - 2869
+      - 25
+    F-2:
+      labels:
+      - 8626
+      test:
+      - 8626
+      - 25
+      train:
+      - 2861
+      - 25
+    F-3:
+      labels:
+      - 8376
+      test:
+      - 8376
+      - 25
+      train:
+      - 2880
+      - 25
+    F-4:
+      labels:
+      - 3422
+      test:
+      - 3422
+      - 55
+      train:
+      - 2244
+      - 55
+    F-5:
+      labels:
+      - 3922
+      test:
+      - 3922
+      - 55
+      train:
+      - 2598
+      - 55
+    F-7:
+      labels:
+      - 5054
+      test:
+      - 5054
+      - 55
+      train:
+      - 2511
+      - 55
+    F-8:
+      labels:
+      - 2487
+      test:
+      - 2487
+      - 55
+      train:
+      - 3342
+      - 55
+    G-1:
+      labels:
+      - 8469
+      test:
+      - 8469
+      - 25
+      train:
+      - 2820
+      - 25
+    G-2:
+      labels:
+      - 7361
+      test:
+      - 7361
+      - 25
+      train:
+      - 2478
+      - 25
+    G-3:
+      labels:
+      - 7907
+      test:
+      - 7907
+      - 25
+      train:
+      - 2624
+      - 25
+    G-4:
+      labels:
+      - 7632
+      test:
+      - 7632
+      - 25
+      train:
+      - 2551
+      - 25
+    G-6:
+      labels:
+      - 8640
+      test:
+      - 8640
+      - 25
+      train:
+      - 2881
+      - 25
+    G-7:
+      labels:
+      - 8029
+      test:
+      - 8029
+      - 25
+      train:
+      - 2446
+      - 25
+    M-1:
+      labels:
+      - 2277
+      test:
+      - 2277
+      - 55
+      train:
+      - 2209
+      - 55
+    M-2:
+      labels:
+      - 2277
+      test:
+      - 2277
+      - 55
+      train:
+      - 2208
+      - 55
+    M-3:
+      labels:
+      - 2127
+      test:
+      - 2127
+      - 55
+      train:
+      - 2037
+      - 55
+    M-4:
+      labels:
+      - 2038
+      test:
+      - 2038
+      - 55
+      train:
+      - 2076
+      - 55
+    M-5:
+      labels:
+      - 2303
+      test:
+      - 2303
+      - 55
+      train:
+      - 2032
+      - 55
+    M-6:
+      labels:
+      - 2049
+      test:
+      - 2049
+      - 55
+      train:
+      - 1565
+      - 55
+    M-7:
+      labels:
+      - 2156
+      test:
+      - 2156
+      - 55
+      train:
+      - 1587
+      - 55
+    P-1:
+      labels:
+      - 8505
+      test:
+      - 8505
+      - 25
+      train:
+      - 2872
+      - 25
+    P-10:
+      labels:
+      - 6100
+      test:
+      - 6100
+      - 55
+      train:
+      - 4308
+      - 55
+    P-11:
+      labels:
+      - 3535
+      test:
+      - 3535
+      - 55
+      train:
+      - 3969
+      - 55
+    P-14:
+      labels:
+      - 6100
+      test:
+      - 6100
+      - 55
+      train:
+      - 2880
+      - 55
+    P-15:
+      labels:
+      - 2856
+      test:
+      - 2856
+      - 55
+      train:
+      - 3682
+      - 55
+    P-2:
+      labels:
+      - 8209
+      test:
+      - 8209
+      - 25
+      train:
+      - 2821
+      - 25
+    P-3:
+      labels:
+      - 8493
+      test:
+      - 8493
+      - 25
+      train:
+      - 2855
+      - 25
+    P-4:
+      labels:
+      - 7783
+      test:
+      - 7783
+      - 25
+      train:
+      - 2609
+      - 25
+    P-7:
+      labels:
+      - 8071
+      test:
+      - 8071
+      - 25
+      train:
+      - 2853
+      - 25
+    R-1:
+      labels:
+      - 7244
+      test:
+      - 7244
+      - 25
+      train:
+      - 2874
+      - 25
+    S-1:
+      labels:
+      - 7331
+      test:
+      - 7331
+      - 25
+      train:
+      - 2818
+      - 25
+    S-2:
+      labels:
+      - 1827
+      test:
+      - 1827
+      - 55
+      train:
+      - 926
+      - 55
+    T-1:
+      labels:
+      - 8612
+      test:
+      - 8612
+      - 25
+      train:
+      - 2875
+      - 25
+    T-12:
+      labels:
+      - 2430
+      test:
+      - 2430
+      - 55
+      train:
+      - 1145
+      - 55
+    T-13:
+      labels:
+      - 2430
+      test:
+      - 2430
+      - 55
+      train:
+      - 1145
+      - 55
+    T-2:
+      labels:
+      - 8625
+      test:
+      - 8625
+      - 25
+      train:
+      - 2855
+      - 25
+    T-3:
+      labels:
+      - 8579
+      test:
+      - 8579
+      - 25
+      train:
+      - 2876
+      - 25
+    T-4:
+      labels:
+      - 2217
+      test:
+      - 2217
+      - 55
+      train:
+      - 2272
+      - 55
+    T-5:
+      labels:
+      - 2218
+      test:
+      - 2218
+      - 55
+      train:
+      - 2272
+      - 55
+    T-8:
+      labels:
+      - 1519
+      test:
+      - 1519
+      - 55
+      train:
+      - 748
+      - 55
+    T-9:
+      labels:
+      - 1096
+      test:
+      - 1096
+      - 55
+      train:
+      - 439
+      - 55
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/SMAP_MSL
+  type: distributed
+SMD:
+  background: ''
+  file_list:
+    machine-1-1:
+      labels:
+      - 28479
+      - 1
+      test:
+      - 28479
+      - 38
+      train:
+      - 28479
+      - 38
+    machine-1-2:
+      labels:
+      - 23694
+      - 1
+      test:
+      - 23694
+      - 38
+      train:
+      - 23694
+      - 38
+    machine-2-1:
+      labels:
+      - 23694
+      - 1
+      test:
+      - 23694
+      - 38
+      train:
+      - 23693
+      - 38
+    machine-2-2:
+      labels:
+      - 23700
+      - 1
+      test:
+      - 23700
+      - 38
+      train:
+      - 23699
+      - 38
+    machine-3-1:
+      labels:
+      - 28700
+      - 1
+      test:
+      - 28700
+      - 38
+      train:
+      - 28700
+      - 38
+    machine-3-2:
+      labels:
+      - 23703
+      - 1
+      test:
+      - 23703
+      - 38
+      train:
+      - 23702
+      - 38
+    machine-3-3:
+      labels:
+      - 23703
+      - 1
+      test:
+      - 23703
+      - 38
+      train:
+      - 23703
+      - 38
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/SMD
+  type: distributed
+SWaT:
+  background: ''
+  file_list: {}
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/SWaT
+  type: distributed
+UCR:
+  background: ''
+  file_list:
+    '135':
+      labels:
+      - 7501
+      test:
+      - 7501
+      train:
+      - 2987
+    '136':
+      labels:
+      - 7500
+      test:
+      - 7500
+      train:
+      - 1598
+    '137':
+      labels:
+      - 7500
+      test:
+      - 7500
+      train:
+      - 2185
+    '138':
+      labels:
+      - 7500
+      test:
+      - 7500
+      train:
+      - 1187
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/UCR
+  type: distributed
+WADI:
+  background: ''
+  file_list: {}
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/WADI
+  type: distributed
+synthetic:
+  background: ''
+  file_list: {}
+  path: /mnt/c/Users/johnw/Documents/SFU/TAMA_extended/data/synthetic
+  type: distributed

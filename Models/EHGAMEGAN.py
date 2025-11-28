@@ -1,5 +1,4 @@
 from re import X
-from turtle import shape
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,63 +32,64 @@ class ConvLayer(nn.Module):
         return x.permute(0, 2, 1)  # Permute back
 
 
-class Generator(nn.Module): 
-    def __init__(self, win_size, latent_dim, input_c, dropout=0.2):
+class Generator(nn.Module):
+    def __init__(self, win_size, latent_dim, input_c=1, dropout=0.2):
         super(Generator, self).__init__()
         self.win_size = win_size
-        self.n_feats = input_c
-        self.n_hidden = self.n_feats // 2 + 1
-        self.n = self.n_feats  # * self.win_size
-        self.norm1 = nn.LayerNorm(self.n)
-        self.norm2 = nn.LayerNorm(self.n)
-        self.conv = nn.Sequential(
+        self.input_c = input_c
+        self.proj = nn.Sequential(
             nn.Dropout(dropout),
-            ConvLayer(input_c, 3)
+            nn.Linear(latent_dim, 256),
+            nn.LeakyReLU(True),
+            nn.Linear(256, win_size * input_c),
+            nn.Tanh(),                     # scale to [-1,1]; adjust if you prefer [0,1]
         )
 
-        self.discriminator = nn.Sequential(
-            # nn.Dropout(dropout),
-            nn.Linear(self.n, self.n_hidden),
-            nn.LeakyReLU(True),
-            nn.Linear(self.n_hidden, self.n_hidden),
-            nn.LeakyReLU(True),
-            # nn.Linear(self.n_hidden, self.win_size),
-            # nn.Tanh(),
-            nn.Linear(self.n_hidden, self.n),
-            nn.Sigmoid(),
-        )
-
-    def forward(self, d):  # (b,1,n)
-        validity = self.discriminator(d)  # (b,1,n)#.contiguous().view(validity.shape[0],-1))#(b,w,n)
-        return validity  # (b,1,n).view(validity.shape[0],*(self.win_size, self.n_feats)) #(b,w)
+    def forward(self, z):                  # z: (B, latent_dim)
+        x = self.proj(z)                   # (B, win_size*input_c)
+        x = x.view(z.size(0), self.input_c, self.win_size)  # (B, C, W)
+        return x
 
 
-class Discriminator(nn.Module):  
-    def __init__(self, win_size, input_c, dropout=0.2):
+class Discriminator(nn.Module):
+    def __init__(self, win_size, input_c=1, dropout=0.2):
         super(Discriminator, self).__init__()
         self.win_size = win_size
-        self.n_feats = input_c
-        self.n_hidden = self.n_feats // 2 + 1
-        self.n = self.n_feats  # * self.win_size
-        self.norm2 = nn.LayerNorm(self.n)
-        self.conv = nn.Sequential(
+        self.input_c = input_c
+
+        self.feature = nn.Sequential(
             nn.Dropout(dropout),
-            ConvLayer(input_c, 3)
-        )
-        self.discriminator = nn.Sequential(
-            # nn.Dropout(dropout),
-            nn.Linear(self.n, self.n_hidden),
-            nn.LeakyReLU(True),
-            nn.Linear(self.n_hidden, self.n_hidden),
-            nn.LeakyReLU(True),
-            nn.Linear(self.n_hidden, self.n),
-            nn.Sigmoid(),
+            nn.Conv1d(input_c, 16, kernel_size=5, stride=2, padding=2),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv1d(16, 32, kernel_size=5, stride=2, padding=2),
+            nn.LeakyReLU(0.2, inplace=True),
         )
 
-    def forward(self, d):  # (b,1,n)
-        validity = self.conv(d)
-        validity = self.discriminator(validity)  # (b,1,n)#.contiguous().view(validity.shape[0],-1))#(b,w,n)
-        return validity  # (b,1,n).view(validity.shape[0],*(self.win_size, self.n_feats)) #(b,w)
+        # Infer flatten size
+        with torch.no_grad():
+            dummy = torch.zeros(1, input_c, win_size)
+            f = self.feature(dummy)
+            flat = f.view(1, -1).size(1)
+
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(flat, 128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(128, 1)  # logit
+        )
+
+    def forward(self, x):                  # x: (B, C, W) or (B, W) or (B, W, C)
+        # Coerce to (B, C, W)
+        if x.dim() == 2:                   # (B, W) -> (B,1,W)
+            x = x.unsqueeze(1)
+        elif x.dim() == 3:
+            # If (B, W, C) -> (B, C, W)
+            if x.shape[1] == self.win_size and x.shape[2] == self.input_c:
+                x = x.transpose(1, 2).contiguous()
+            # If already (B, C, W), leave it
+
+        f = self.feature(x)
+        return self.classifier(f)          # (B, 1)
 
 
 ## LSTM_AD Model

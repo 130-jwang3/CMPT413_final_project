@@ -192,8 +192,8 @@ class PSMSegLoader(dataSegLoader):
         # length = 20000
         index = 40000
         length = 20000
-        # index = 0 #用于收敛性实验
-        # length = 50000 #用于收敛性实验
+        # index = 0
+        # length = 50000
         data = pd.read_csv(data_path + '/PSM_train.csv')[index:index + length]
         data = data.values[:, 1:]
         data = np.nan_to_num(data)

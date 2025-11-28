@@ -12,31 +12,49 @@ import csv
 import re
 import matplotlib.pyplot as plt
 import sys
+from pathlib import Path
 
 from Datasets.Dataset import ProcessedDataset
 
 from BigModel.Base import BigModelBase
-from BigModel.Azure import Chat_AzureGPT4o, Chat_AzureGPT4o_mini, Chat_DeepSeekR1
-from BigModel.OpenAI import Chat_GPT4o
-from BigModel.GLM import Chat_GLM4v
-from BigModel.Claude import Chat_Claude
-from BigModel.Groq import Chat_LLaVA_v1_5
-from BigModel.QWen import Chat_Qwen_VL_MAX, Chat_Qwen_VL_PLUS
-from BigModel.Gemini import Chat_Gemini_1_5_pro, Chat_Gemini_1_5_flash
+from BigModel.Ollama import Chat_Ollama
+
+
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv(), override=False)
+
+def _portable_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument('--data-dir', default='./data', help='Root for raw datasets (if needed by Dataset impl)')
+    parser.add_argument('--output-dir', default='./output', help='Root for generated windows/texts/images')
+    parser.add_argument('--log-dir', default='./log', help='Root for YAML logs')
+    parser.add_argument('--subtask', type=str, default='', help='Optional subfolder under output/ and log/')
+    return parser
+
+
+def _portable_dirs(args):
+    out_dir = (Path(args.output_dir) / args.subtask).resolve()
+    log_dir = (Path(args.log_dir) / args.subtask).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir, log_dir
+
+def _make_ollama(max_tokens, temperature, top_p):
+    host = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+    model = os.environ.get('OLLAMA_MODEL', 'llava:latest')
+    print(f"[TAMA] Using OLLAMA_HOST = {host} ; OLLAMA_MODEL = {model}")
+    return Chat_Ollama(
+        host=host,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+    )
+
 
 ChatBotMAP = {
-    'GPT-4o': Chat_AzureGPT4o,
-    'GPT-4o-mini': Chat_AzureGPT4o_mini,
-    'GPT-4o-openai':Chat_GPT4o,
-    'deepseek': Chat_DeepSeekR1,
-    'GLM-4v-plus': Chat_GLM4v,
-    'Claude': Chat_Claude,
-    'LLaVA': Chat_LLaVA_v1_5,
-    'qwen-vl-max': Chat_Qwen_VL_MAX,
-    'qwen-vl-plus':Chat_Qwen_VL_PLUS,
-    'gemini-1.5-pro': Chat_Gemini_1_5_pro,
-    'gemini-1.5-flash': Chat_Gemini_1_5_flash,
+    'ollama': _make_ollama,
 }
+
 '''
 Args Parser
 '''
@@ -48,29 +66,36 @@ def args_parse():
     parser.add_argument('--double_check', default=False, action='store_true')
     parser.add_argument('--normal_reference', type=int, default=3, required=False)
     parser.add_argument('--ratio', type=float, default=1.0, required=False)
-    parser.add_argument('--data_id_list', type=str, default='', help='Data id list')
-    parser.add_argument('--LLM', type=str, default='GPT-4o', help='[GPT-4o, GPT-4o-mini, GLM-4v-plus]')
-    parser.add_argument('--subtask', type=str, default='', help='Subtask name', required=False)
+    parser.add_argument('--data_id_list', type=str, default='', help='Comma-separated ids, e.g. "135,136"')
+    parser.add_argument('--LLM', type=str, default='ollama', help='[ollama]')
+    _portable_args(parser)  # <— add portable flags (data-dir/output-dir/log-dir/subtask)
+
     args = parser.parse_args()
-    # dump data_id_list_str
-    data_id_list_str = args.data_id_list
-    data_id_list = data_id_list_str.strip('][').replace(' ', '').split(',')
-    args.data_id_list = data_id_list
+    # normalize data_id_list
+    data_id_list_str = args.data_id_list.strip()
+    if data_id_list_str:
+        args.data_id_list = data_id_list_str.strip('[]').replace(' ', '').split(',')
+    else:
+        args.data_id_list = []
     return args
+
 
 '''
 Message Helper
 '''
+
+
 class MessageHelper:
-    def __init__(self, chatbot:BigModelBase):
+    def __init__(self, chatbot: BigModelBase):
         self.message_list = []
         self.chatbot = chatbot
-    
-    def set_system_message(self, message):
-        self.sys_message = {'role': 'system', 'content': message}
+
+    def set_system_message(self, message: str):
+        # Use a content list so the adapter can serialize it correctly
+        self.sys_message = {'role': 'system', 'content': [self.chatbot.text_item(message)]}
         self.message_list.append(self.sys_message)
 
-    def add_message(self, role:str, text:str, image_path_list:list=[], text_path_list:list=[]):
+    def add_message(self, role: str, text: str, image_path_list: list = [], text_path_list: list = []):
         new_message = {
             'role': role,
             'content': [self.chatbot.text_item(text)],
@@ -90,7 +115,7 @@ class MessageHelper:
             cnt += 1
         self.message_list.append(new_message)
 
-    def add_message_with_base64(self, role:str, text:str, image_base64_list:list=[]):
+    def add_message_with_base64(self, role: str, text: str, image_base64_list: list = []):
         new_message = {
             'role': role,
             'content': [self.chatbot.text_item(text)],
@@ -99,7 +124,7 @@ class MessageHelper:
             new_message['content'].append(self.chatbot.image_item_from_base64(image_base64))
         self.message_list.append(new_message)
 
-    def add_user_message_with_texts(self, role:str, text:str, text_list:list):
+    def add_user_message_with_texts(self, role: str, text: str, text_list: list):
         new_message = {
             'role': role,
             'content': [{'type': 'text', 'text': text}],
@@ -115,29 +140,39 @@ class MessageHelper:
             cnt += 1
         self.message_list.append(new_message)
 
-    def add_user_message(self, text:str, image_path_list:list=[], text_path_list:list=[]):
+    def add_user_message(self, text: str, image_path_list: list = [], text_path_list: list = []):
         self.add_message('user', text, image_path_list, text_path_list)
-    def add_chatbot_answer(self, text:str, image_path_list:list=[], text_path_list:list=[]):
+
+    def add_chatbot_answer(self, text: str, image_path_list: list = [], text_path_list: list = []):
         self.add_message('assistant', text, image_path_list, text_path_list)
+
     def get_message(self):
         return self.message_list
+
     def clean_message(self):
         self.message_list = []
-        # self.message_list.append(self.sys_message)
+        # Preserve the system message for every new stride/channel
+        if hasattr(self, 'sys_message'):
+            self.message_list.append(self.sys_message)
+
     def copy_message(self):
         new_helper = MessageHelper(self.chatbot)
         new_helper.message_list = self.message_list.copy()
         return new_helper
-    
+
+
 '''
 Normal Reference Helper
 '''
+
+
 class NormalReferenceHelper:
-    def __init__(self, normal_reference_base:str, structure_yaml_path:str):
+    def __init__(self, normal_reference_base: str, structure_yaml_path: str):
         self.normal_reference_base = normal_reference_base
         self.structure_yaml_path = structure_yaml_path
         self.structure_info = yaml.safe_load(open(structure_yaml_path, 'r'))
-    def find_normal_reference(self, data_id, channel, num:int=3, fixed:bool=False)->list:
+
+    def find_normal_reference(self, data_id, channel, num: int = 3, fixed: bool = False) -> list:
         if os.path.exists(os.path.join(self.normal_reference_base, data_id, 'train', 'text')):
             file_list = os.listdir(os.path.join(self.normal_reference_base, data_id, 'train', 'text'))
             normal_list = []
@@ -160,12 +195,17 @@ class NormalReferenceHelper:
             print(f'Normal reference list: {sample_normal_list}')
             for idx in range(num):
                 parsed_id = sample_normal_list[idx].split('-')
-                image_path = os.path.join(self.normal_reference_base, data_id, 'test', 'text', f'{parsed_id[-2]}-{parsed_id[-1]}.txt')
+                image_path = os.path.join(self.normal_reference_base, data_id, 'test', 'text',
+                                          f'{parsed_id[-2]}-{parsed_id[-1]}.txt')
                 sample_normal_list[idx] = image_path
             return sample_normal_list
+
+
 '''
 Logger
 '''
+
+
 # class Logger:
 #     def __init__(self, save_path:str, split_char:str='@'):
 #         self.save_path = save_path
@@ -179,11 +219,11 @@ Logger
 #         self.file = open(save_path, self.mode)
 #         self.writer = csv.writer(self.file)
 class Logger:
-    def __init__(self, save_path:str):
+    def __init__(self, save_path: str):
         self.save_path = save_path
         self.log_info = {}
 
-    def log(self, data_id, stride, channel, info:dict):
+    def log(self, data_id, stride, channel, info: dict):
         if data_id not in self.log_info:
             self.log_info[data_id] = {}
         if stride not in self.log_info[data_id]:
@@ -193,24 +233,31 @@ class Logger:
     def save(self):
         with open(self.save_path, 'w') as f:
             yaml.dump(self.log_info, f)
+
+
 '''
 WheelChair of JSON mode
 '''
-JSON_whitelist = ['GPT-4o','GPT-4o-openai', 'GPT-4o-mini','deepseek','GLM-4v-plus']
-class JSON_WheelChair:
-    def __init__(self):
-        self.chatbot = Chat_GLM4v(4096, 0.1, 0.3)
-        self.message_helper = MessageHelper(self.chatbot)
-        self.prompt = 'You are a helpful JSON formater. \nI will give you a text and you need to format it into JSON format without any change. \nThe key is defined in below:(If there is no content of a key, you can output "")\n'
-    def add_key(self, key:str, description:str):
-        self.prompt += f'    - "{key}": {description}\n'
-    def get_json(self, text:str):
-        prompt = self.prompt + 'The text:\n' + text
-        self.message_helper.add_user_message(prompt)
-        response = self.chatbot.chat_retry(self.message_helper.get_message())
-        print(response)
-        return response
-    
+JSON_whitelist = ['ollama']
+
+
+# class JSON_WheelChair:
+#     def __init__(self):
+#         self.chatbot = Chat_GLM4v(4096, 0.1, 0.3)
+#         self.message_helper = MessageHelper(self.chatbot)
+#         self.prompt = 'You are a helpful JSON formater. \nI will give you a text and you need to format it into JSON format without any change. \nThe key is defined in below:(If there is no content of a key, you can output "")\n'
+#
+#     def add_key(self, key: str, description: str):
+#         self.prompt += f'    - "{key}": {description}\n'
+#
+#     def get_json(self, text: str):
+#         prompt = self.prompt + 'The text:\n' + text
+#         self.message_helper.add_user_message(prompt)
+#         response = self.chatbot.chat_retry(self.message_helper.get_message())
+#         print(response)
+#         return response
+
+
 '''
 Chat Controller
 Features:
@@ -219,8 +266,10 @@ Features:
     - retry
     - rate control
 '''
+
+
 class ChatController:
-    def __init__(self, chatbot:BigModelBase):
+    def __init__(self, chatbot: BigModelBase):
         self.chatbot = chatbot
         self.max_tokens_per_minute = chatbot.tokens_per_minute
         self.used_tokens_in_minute = 0
@@ -233,16 +282,22 @@ class ChatController:
         }
         self.start_time = time.time()
         self.sample_time_usage = []
+
     def start_timming(self):
         self.start_time = time.time()
+
     def get_used_time(self):
         return time.time() - self.start_time
+
     def get_used_token(self):
         return self.token_usage
+
     def get_last_used_token(self):
         return self.last_used_token
+
     def get_last_sample_time_usage(self):
         return self.sample_time_usage[-1]
+
     def check_rate_limit(self):
         # check if token limit reached
         used_seconds = self.get_used_time()
@@ -259,7 +314,50 @@ class ChatController:
             print(f'slepp for {sleep_time} s...')
             time.sleep(sleep_time)
             self.start_timming()
-    def chat_with_rate_control(self, message:list, max_retry:int=6, JSON_wheelchair=None)->dict:
+
+    # inside class ChatController
+    def _parse_json_tolerant(self, s: str):
+        import json, re
+        cleaned = re.sub(r'^\s*```(?:json)?\s*|\s*```\s*$', '', s, flags=re.I | re.S)
+
+        if not cleaned.strip():
+            return {
+                "normal_pattern": "",
+                "abnormal_index": "[]",
+                "abnormal_description": "",
+                "abnormal_type_description": ""
+            }
+
+        try:
+            obj = json.loads(cleaned)
+        except Exception:
+            # fallback: treat the whole reply as free text
+            return {
+                "normal_pattern": cleaned.strip(),
+                "abnormal_index": "[]",
+                "abnormal_description": cleaned.strip(),
+                "abnormal_type_description": ""
+            }
+
+        if not isinstance(obj, dict):
+            obj = {"normal_pattern": str(obj)}
+
+        # ensure all keys exist
+        obj.setdefault("normal_pattern", "")
+        obj.setdefault("abnormal_index", "[]")
+        obj.setdefault("abnormal_description", "")
+        obj.setdefault("abnormal_type_description", "")
+
+        # last-resort mapping if the model used a different key
+        if not obj["normal_pattern"]:
+            for k in ("message", "content", "text", "answer", "pattern", "normalPattern"):
+                if isinstance(obj.get(k, None), str) and obj[k].strip():
+                    obj["normal_pattern"] = obj[k].strip()
+                    break
+
+        return obj
+
+    def chat_with_rate_control(self, message: list, max_retry: int = 6, JSON_wheelchair=None) -> dict:
         # chat with retry
         pause_retry = max_retry // 2
         retry_times = 0
@@ -270,15 +368,16 @@ class ChatController:
                 self.check_rate_limit()
                 # print(f"Input message: {message}")  # Debug: Check input
                 response = self.chatbot.chat(message)
+                print("[RAW MODEL OUTPUT]\\n", repr(response)[:1200], "\n---")
                 # print(f"Raw response from chatbot: {response!r}")  # Debug: Check raw output
-                self.token_usage = self.chatbot.get_used_token()    # update total token usage
+                self.token_usage = self.chatbot.get_used_token()  # update total token usage
                 self.last_used_token = self.chatbot.get_last_used_token()['total_tokens']
                 self.used_tokens_in_minute += self.last_used_token  # update used token in this minute
                 if JSON_wheelchair is not None:
                     response = JSON_wheelchair.get_json(response)
                     # print("json response:" + response)
                 # dump JSON response
-                parsed_response = json.loads(response)
+                parsed_response = self._parse_json_tolerant(response)
                 if retry_times > pause_retry:
                     print('Connection recovery...', file=sys.stderr)
                 # record time usage of a sample
@@ -289,7 +388,7 @@ class ChatController:
             except Exception as e:
                 print(f'Error: {e}, try again. {retry_times}/{max_retry}')
                 retry_times += 1
-                time.sleep(int(5*retry_times))
+                time.sleep(int(5 * retry_times))
                 if retry_times == pause_retry:
                     print('There is something wrong, please check it and press any key to continue...', file=sys.stderr)
                     cmd = input('type [retry] to retry, [ok] to continue:')
@@ -309,6 +408,7 @@ class ChatController:
         print(f'Mean time: {mean_time}, min time: {min_time}, max time: {max_time}')
         money = self.get_used_token()['total_tokens'] / 1000000 * 5
         print(f'Earned: {money:.2f} USD')
+
 
 
 '''
@@ -369,6 +469,8 @@ The output should include some structured information, please output in JSON for
         + based on the provided abnormal_type, you should double check the abnormal_index.
 Last, please double check before you submit your answer.
 '''
+
+
 def make_normal_reference_response_text(normal_pattern):
     assistant_response_text = f'''
     The answer of "Task1" part is as follows: 
@@ -376,10 +478,12 @@ def make_normal_reference_response_text(normal_pattern):
     '''
     return assistant_response_text
 
-def make_anormaly_detection_response_text(parsed_respon:dict):
+
+def make_anormaly_detection_response_text(parsed_respon: dict):
     abnormal_index = parsed_respon['abnormal_index'] if 'abnormal_index' in parsed_respon else '[]'
     abnormal_description = parsed_respon['abnormal_description'] if 'abnormal_description' in parsed_respon else ''
-    abnormal_type_description = parsed_respon['abnormal_type_description'] if 'abnormal_type_description' in parsed_respon else ''
+    abnormal_type_description = parsed_respon[
+        'abnormal_type_description'] if 'abnormal_type_description' in parsed_respon else ''
     # confidence = parsed_respon['confidence'] if 'confidence' in parsed_respon else 0
     assistant_response_text = f'''
     The answer of "Task2" part is as follows: 
@@ -388,6 +492,7 @@ def make_anormaly_detection_response_text(parsed_respon:dict):
         - abnormal_type_description: {abnormal_type_description}
     '''
     return assistant_response_text
+
 
 # double check
 double_check_prompt = '''
@@ -412,12 +517,16 @@ Based on the "nomral reference" I gave you, please read the prediction above and
         + 2. you should check each prediction of the abnormal_index according to the image I gave to you. If there is an abnormality in image but not in the prediction, you should add it. The format should keep the same as the original prediction.
     - The reason why you think the prediction is correct or incorrect. (a 200-300 words paragraph): Make a brief description of your double check, why do you think the prediction is correct or incorrect?
 '''
-def make_double_check_prompt(parsed_respon:dict):
+
+
+def make_double_check_prompt(parsed_respon: dict):
     # has_abnormality = parsed_respon['has_abnormality'] if 'has_abnormality' in parsed_respon else 'True'
     abnormal_index = parsed_respon['abnormal_index'] if 'abnormal_index' in parsed_respon else '[]'
-    abnormal_description = parsed_respon['abnormal_description'] if 'abnormal_description' in parsed_respon else 'there is no abnormality'
+    abnormal_description = parsed_respon[
+        'abnormal_description'] if 'abnormal_description' in parsed_respon else 'there is no abnormality'
     confidence = parsed_respon['confidence'] if 'confidence' in parsed_respon else 0
-    prompt = double_check_prompt.format(abnormal_index=abnormal_index, abnormal_description=abnormal_description, confidence=confidence)
+    prompt = double_check_prompt.format(abnormal_index=abnormal_index, abnormal_description=abnormal_description,
+                                        confidence=confidence)
     return prompt
 
 
@@ -437,31 +546,36 @@ if __name__ == '__main__':
     print(f'NormalReferenceNum: {NormalReferenceNum}, doubel_check_enable: {doubel_check_enable}')
     print(f'Subtask: {subtask_name}, Using LLM: {LLM_name}')
     # exit()
-    # load dataset & normal reference helper
-    # log_save_path = os.path.join('C:\\Users\\johnw\\Documents\\TSAD\\TAMA\\log/text_modality', f'{dataset_name}_{LLM_name}_log.yaml')
-    log_save_path = os.path.join('C:\\Users\\johnw\\Documents\\TSAD\\TAMA\\log', subtask_name, f'{dataset_name}_{LLM_name}_log.yaml')
-    # processed_data_path = 'C:\\Users\\johnw\\Documents\\TSAD\\TAMA\\output'
-    processed_data_path = os.path.join('C:\\Users\\johnw\\Documents\\TSAD\\TAMA\\output', subtask_name)
-    normal_reference_base = os.path.join(processed_data_path, dataset_name)
-    structure_yaml_path = os.path.join(normal_reference_base, 'test_structure.yaml')
-    dataset = ProcessedDataset(os.path.join(processed_data_path, dataset_name), mode='test')
+    # load dataset & normal reference helper — PORTABLE
+    OUT_DIR, LOG_DIR = _portable_dirs(args)
+    dataset_name = args.dataset
+    LLM_name = args.LLM
+    subtask_name = args.subtask  # optional folder label
+
+    # resolved paths
+    MODE="text"
+    log_save_path = str((LOG_DIR / f'{dataset_name}_{LLM_name}_{MODE}_log.yaml').resolve())
+    normal_reference_base = str((OUT_DIR / dataset_name).resolve())
+    structure_yaml_path = str((Path(normal_reference_base) / 'test_structure.yaml').resolve())
+
+    # dataset (expects processed data under <output>/<dataset_name>)
+    dataset = ProcessedDataset(normal_reference_base, mode='test')
     normal_reference_helper = NormalReferenceHelper(normal_reference_base, structure_yaml_path)
     # init chatbot
-    max_tokens=4096
-    temperature=0.1
-    top_p=0.3
-    # chatbot = Chat_AzureGPT4o(max_tokens, temperature, top_p)
-    # chatbot = Chat_GLM4v(max_tokens, temperature, top_p)
+    max_tokens = 4096
+    temperature = 0.1
+    top_p = 0.3
     chatbot = ChatBotMAP[LLM_name](max_tokens, temperature, top_p)
-    # if 'GPT-4o' not in LLM_name:
-    #     js_wheelchair = JSON_WheelChair()
-    # else:
-    #     js_wheelchair = None
     chat_controller = ChatController(chatbot)
     # init logger
     logger = Logger(log_save_path)
     # init message helper
     detect_messager = MessageHelper(chatbot)
+    detect_messager.set_system_message(
+        'STRICT_JSON: For every prompt, reply with a single JSON object ONLY (no markdown, no prose). '
+        'Task1 keys: {"normal_pattern": ""}. '
+        'Task2 keys: {"abnormal_index": "", "abnormal_description": "", "abnormal_type_description": ""}.'
+    )
     # detect_messager.set_system_message('you are a helpful assistant to detect the abnormality in the time series data. Please output in JSON format.')
     # preparation
     if data_id_list == [] or data_id_list == ['']:
@@ -493,22 +607,31 @@ if __name__ == '__main__':
         for ch in range(data_channel):
             normal_reference_path_list = []
             if NormalReferenceNum > 0:
-                normal_reference_path_list = normal_reference_helper.find_normal_reference(data_id, ch, NormalReferenceNum)
+                normal_reference_path_list = normal_reference_helper.find_normal_reference(data_id, ch,
+                                                                                           NormalReferenceNum)
                 if normal_reference_path_list == []:
                     continue
                 detect_messager.add_user_message(normal_reference_prompt, text_path_list=normal_reference_path_list)
                 # print(normal_reference_image_list)
                 # continue
-                if LLM_name not in JSON_whitelist:
-                    normal_reference_chair = JSON_WheelChair()
-                    normal_reference_chair.add_key('normal_pattern', '')
-                else:
-                    normal_reference_chair = None
-                normal_reference_response = chat_controller.chat_with_rate_control(detect_messager.get_message(), JSON_wheelchair=normal_reference_chair)
+                # if LLM_name not in JSON_whitelist:
+                #     normal_reference_chair = JSON_WheelChair()
+                #     normal_reference_chair.add_key('normal_pattern', '')
+                # else:
+                #     normal_reference_chair = None
+                normal_reference_chair = None
+                normal_reference_response = chat_controller.chat_with_rate_control(detect_messager.get_message(),
+                                                                                   JSON_wheelchair=normal_reference_chair)
                 if normal_reference_response == {}:
                     continue
-                print(f'data_id: {data_id}, channel: {ch}, normal_reference_token_usage: {chat_controller.get_last_used_token()} >> Time: {chat_controller.get_last_sample_time_usage():.2f}s')
-                normal_pattern = str(normal_reference_response['normal_pattern'])
+                print(
+                    f'data_id: {data_id}, channel: {ch}, normal_reference_token_usage: {chat_controller.get_last_used_token()} >> Time: {chat_controller.get_last_sample_time_usage():.2f}s')
+                normal_pattern = str(
+                    normal_reference_response.get('normal_pattern')
+                    or normal_reference_response.get('normalPattern')
+                    or normal_reference_response.get('pattern')
+                    or ""
+                )
                 normal_reference_response_prompt = make_normal_reference_response_text(normal_pattern)
                 detect_messager.add_chatbot_answer(normal_reference_response_prompt)
             # for each stride
@@ -523,17 +646,21 @@ if __name__ == '__main__':
                 label_index = np.where(image_label >= 1)[0].tolist()
                 # chat
                 stride_msg_helper.add_user_message(anormaly_detection_prompt, text_path_list=[text_path])
-                if LLM_name not in JSON_whitelist:
-                    stride_chair = JSON_WheelChair()
-                    stride_chair.add_key('abnormal_index', 'the format is like "[(start1, end1)/confidence_1/abnormal_type_1, (start2, end2)/confidence_2/abnormal_type_2, ...]", the abnormal type is one of [global, contextual, frequency, trend, shapelet], the number of abnormal index should be no more than 5')
-                    # stride_chair.add_key('abnormal_description', 'a 200-300 words paragraph')
-                    # stride_chair.add_key('abnormal_type_description', 'a 200-300 words paragraph')
-                else:
-                    stride_chair = None
-                stride_response = chat_controller.chat_with_rate_control(stride_msg_helper.get_message(), JSON_wheelchair=stride_chair)
+                # if LLM_name not in JSON_whitelist:
+                #     stride_chair = JSON_WheelChair()
+                #     stride_chair.add_key('abnormal_index',
+                #                          'the format is like "[(start1, end1)/confidence_1/abnormal_type_1, (start2, end2)/confidence_2/abnormal_type_2, ...]", the abnormal type is one of [global, contextual, frequency, trend, shapelet], the number of abnormal index should be no more than 5')
+                #     # stride_chair.add_key('abnormal_description', 'a 200-300 words paragraph')
+                #     # stride_chair.add_key('abnormal_type_description', 'a 200-300 words paragraph')
+                # else:
+                #     stride_chair = None
+                stride_chair = None
+                stride_response = chat_controller.chat_with_rate_control(stride_msg_helper.get_message(),
+                                                                         JSON_wheelchair=stride_chair)
                 if stride_response == {}:
                     continue
-                print(f'[{sample_cnt}/{total_sample_num}]>> data_id: {data_id}, stride: {stride_idx}, channel: {ch}, stride_token_usage: {chat_controller.get_last_used_token()} >> Time: {chat_controller.get_last_sample_time_usage():.2f}s')
+                print(
+                    f'[{sample_cnt}/{total_sample_num}]>> data_id: {data_id}, stride: {stride_idx}, channel: {ch}, stride_token_usage: {chat_controller.get_last_used_token()} >> Time: {chat_controller.get_last_sample_time_usage():.2f}s')
                 # double check
                 response_abnormal_index = stride_response.get('abnormal_index', '[]')
                 double_check_response = None
@@ -569,8 +696,8 @@ if __name__ == '__main__':
                     #         xticks_end = check_idx + window_length//3 + 1
                     data = dataset.get_data(data_id, stride_idx, ch)
                     window_length = data.shape[0]
-                    xticks_start_list = [0, window_length//3]
-                    xticks_end_list = [2*window_length//3, window_length]
+                    xticks_start_list = [0, window_length // 3]
+                    xticks_end_list = [2 * window_length // 3, window_length]
                     base64_list = []
                     for check_idx in range(2):
                         xticks_start = xticks_start_list[check_idx]
@@ -592,22 +719,27 @@ if __name__ == '__main__':
                         # image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
                         # base64_list.append(image_base64)
                         # plt.close(fig)
-                        text_data = np.array2string(data_for_check, separator=',', precision=3, suppress_small=True).replace('\n', ' ').strip('[]')
+                        text_data = np.array2string(data_for_check, separator=',', precision=3,
+                                                    suppress_small=True).replace('\n', ' ').strip('[]')
                         base64_list.append(text_data)
                     double_check_msg_helper = stride_msg_helper.copy_message()
                     double_check_msg_helper.add_chatbot_answer(make_anormaly_detection_response_text(stride_response))
                     double_check_prompt = make_double_check_prompt(stride_response)
                     double_check_msg_helper.add_user_message_with_texts('user', double_check_prompt, base64_list)
-                    if LLM_name not in JSON_whitelist:
-                        double_check_chair = JSON_WheelChair()
-                        double_check_chair.add_key('corrected_abnormal_index', 'the format is like "[(start1, end1)/confidence_1/abnormal_type_1, (start2, end2)/confidence_2/abnormal_type_2, ...]"')
-                        # double_check_chair.add_key('reason', 'a 200-300 words paragraph')
-                    else:
-                        double_check_chair = None
-                    double_check_response = chat_controller.chat_with_rate_control(double_check_msg_helper.get_message(), JSON_wheelchair=double_check_chair)
+                    # if LLM_name not in JSON_whitelist:
+                    #     double_check_chair = JSON_WheelChair()
+                    #     double_check_chair.add_key('corrected_abnormal_index',
+                    #                                'the format is like "[(start1, end1)/confidence_1/abnormal_type_1, (start2, end2)/confidence_2/abnormal_type_2, ...]"')
+                    #     # double_check_chair.add_key('reason', 'a 200-300 words paragraph')
+                    # else:
+                    #     double_check_chair = None
+                    double_check_chair = None
+                    double_check_response = chat_controller.chat_with_rate_control(
+                        double_check_msg_helper.get_message(), JSON_wheelchair=double_check_chair)
                     if double_check_response == {}:
                         continue
-                    print(f'Double check >> check_idx: {check_idx}, double_check_token_usage: {chat_controller.get_last_used_token()} >> Time: {chat_controller.get_last_sample_time_usage():.2f}s')
+                    print(
+                        f'Double check >> check_idx: {check_idx}, double_check_token_usage: {chat_controller.get_last_used_token()} >> Time: {chat_controller.get_last_sample_time_usage():.2f}s')
                 # log
                 log_item = {
                     'data_id': data_id,
@@ -616,9 +748,12 @@ if __name__ == '__main__':
                     'image': text_path,
                     'normal_reference_num': len(normal_reference_path_list),
                     'labels': str(label_index),
-                    'abnormal_index': stride_response['abnormal_index'] if 'abnormal_index' in stride_response else '[]',
-                    'abnormal_type_description': stride_response['abnormal_type_description'] if 'abnormal_type_description' in stride_response else '',
-                    'abnormal_description': stride_response['abnormal_description'] if 'abnormal_description' in stride_response else '',
+                    'abnormal_index': stride_response[
+                        'abnormal_index'] if 'abnormal_index' in stride_response else '[]',
+                    'abnormal_type_description': stride_response[
+                        'abnormal_type_description'] if 'abnormal_type_description' in stride_response else '',
+                    'abnormal_description': stride_response[
+                        'abnormal_description'] if 'abnormal_description' in stride_response else '',
                     'normal_reference': {
                         'normal_image_list': str([]),
                         'normal_pattern': ""
@@ -634,7 +769,8 @@ if __name__ == '__main__':
                     if double_check_response is not None:
                         log_item['double_check'] = {
                             # 'is_correct': double_check_response['is_correct'] if 'is_correct' in double_check_response else 'False',
-                            'corrected_abnormal_index': double_check_response['corrected_abnormal_index'] if 'corrected_abnormal_index' in double_check_response else '[]',
+                            'corrected_abnormal_index': double_check_response[
+                                'corrected_abnormal_index'] if 'corrected_abnormal_index' in double_check_response else '[]',
                             'reason': double_check_response['reason'] if 'reason' in double_check_response else '',
                         }
                 logger.log(data_id, stride_idx, ch, log_item)

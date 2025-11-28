@@ -1,22 +1,24 @@
+import os
+import numpy as np
+from pprint import pprint
+from tqdm import tqdm
+
 import torch
 import torch.nn as nn
-import numpy as np
-import os
+
 from Models.EHGAMEGAN import Generator, Discriminator, LSTM_AD, GDN  # TAMA structure
-from utils.data_loader import get_loader_segment  # Assuming this exists
+from utils.data_loader import get_loader_segment
 from utils.optimizer import compute_gradient_penalty
 from utils.net_struct import generate_fc_edge_index
-from tqdm import tqdm
-# from src.eval_methods import bf_search  # Commented out; re-enable if needed
-from pprint import pprint
 
 # Use GPU
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+
 class EarlyStopping:
     def __init__(self, model_save_path, patience=3, verbose=False, dataset_name='', delta=0):
-        self.patience = patience 
-        self.verbose = verbose  
+        self.patience = patience
+        self.verbose = verbose
         self.counter = 0
         self.best_score = None
         self.early_stop = False
@@ -24,7 +26,7 @@ class EarlyStopping:
         self.delta = delta
         self.dataset = dataset_name
         self.model_save_path = model_save_path
-    
+
     def __call__(self, val_loss, model_G, model_D, Predictor, Predictor_S, epoch):
         score = -val_loss
         if self.best_score is None:
@@ -49,6 +51,7 @@ class EarlyStopping:
         }, file_path)
         self.val_loss_min = val_loss
 
+
 class Solver(object):
     DEFAULTS = {}
 
@@ -61,29 +64,33 @@ class Solver(object):
 
         # Generate edge_index_sets for GDN
         fc_edge_index = generate_fc_edge_index(self.input_c)
-        fc_edge_index = fc_edge_index.clone().detach().to(self.device, dtype=torch.long)  # Fix UserWarning
+        fc_edge_index = fc_edge_index.clone().detach().to(self.device, dtype=torch.long)
         self.edge_index_sets = [fc_edge_index]
 
-        _,self.train_loader = get_loader_segment(self.data_path,
-                                                  batch_size=self.batch_size,
-                                                  win_size=self.win_size,
-                                                  mode='train',
-                                                  dataset=self.dataset)
-        self.cur_dataset, self.test_loader = get_loader_segment(self.data_path,
-                                                                batch_size=self.batch_size,
-                                                                win_size=self.win_size,
-                                                                mode='test',
-                                                                dataset=self.dataset)
+        _, self.train_loader = get_loader_segment(
+            self.data_path,
+            batch_size=self.batch_size,
+            win_size=self.win_size,
+            mode='train',
+            dataset=self.dataset
+        )
+        self.cur_dataset, self.test_loader = get_loader_segment(
+            self.data_path,
+            batch_size=self.batch_size,
+            win_size=self.win_size,
+            mode='test',
+            dataset=self.dataset
+        )
 
     def train_with_loader(self):
         generator = Generator(win_size=self.win_size, latent_dim=self.latent_dim, input_c=self.input_c).to(self.device)
         discriminator = Discriminator(win_size=self.win_size, input_c=self.input_c).to(self.device)
         predictor_T = LSTM_AD(feats=self.input_c).to(self.device)
         predictor_S = GDN(edge_index_sets=self.edge_index_sets,
-                        node_num=self.input_c,
-                        win_size=self.win_size,
-                        out_layer_num=1,
-                        out_layer_inter_dim=self.gat_inter_dim).to(self.device)
+                          node_num=self.input_c,
+                          win_size=self.win_size,
+                          out_layer_num=1,
+                          out_layer_inter_dim=self.gat_inter_dim).to(self.device)
 
         optimizer_G = torch.optim.Adam(generator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
         optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
@@ -126,37 +133,67 @@ class Solver(object):
                 optimizer_PS.zero_grad()
                 print("  Gradients zeroed")
 
-                input_data = input_data.float().to(self.device)  # Shape: (batch, win_size, input_c)
-                y_input_data = y_input_data.float().to(self.device)  # Shape: (batch, horizon, input_c)
+                # Shapes:
+                # input_data: (B, W, C)
+                # y_input_data: (B, H=1, C)
+                input_data = input_data.float().to(self.device)
+                y_input_data = y_input_data.float().to(self.device)
                 print("  Data moved to device")
 
-                # Transpose for LSTM (seq_len, batch, input_size)
-                input_data_lstm = input_data.transpose(0, 1)  # (win_size, batch, input_c)
+                if input_data.dim() == 2:
+                    input_data = input_data.unsqueeze(-1)  # (B, W, 1)
+                if y_input_data.dim() == 1:
+                    y_input_data = y_input_data.unsqueeze(-1).unsqueeze(1)  # (B, 1, 1)
+                    if self.input_c > 1:
+                        y_input_data = y_input_data.expand(-1, 1, self.input_c)
+
+                # Expect: input_data (B, W, C); y_input_data (B, 1, C)
+                if input_data.dim() == 2:  # (B, W) -> (B, W, 1)
+                    input_data = input_data.unsqueeze(-1)
+
+                if y_input_data.dim() == 1:  # (B,) -> (B, 1, C)
+                    y_input_data = y_input_data.unsqueeze(-1)  # (B, 1)
+                    y_input_data = y_input_data.unsqueeze(1)  # (B, 1, 1)
+                    if self.input_c > 1:
+                        y_input_data = y_input_data.expand(-1, 1, self.input_c)
+
+                # LSTM expects (W, B, C)
+                input_data_lstm = input_data.transpose(0, 1)  # (W, B, C)
                 print(f"  Transposed input for LSTM: {input_data_lstm.shape}")
 
-                z = torch.FloatTensor(np.random.normal(0, 1, y_input_data.shape)).to(self.device) + y_input_data
-                print("  Generated z for generator")
-
-                fake_input = generator(z)
-                print(f"  Generator output shape: {fake_input.shape}")
-
-                p = predictor_T(input_data_lstm)  # p: (win_size, batch, n_feats)
-                p_loss = torch.mean(self.criterion(p[-1].unsqueeze(1), y_input_data))  # Use last timestep
+                # -------------------------
+                #  Predictor losses (keep)
+                # -------------------------
+                p = predictor_T(input_data_lstm)  # p: (W, B, C)
+                p_loss = torch.mean(self.criterion(p[-1].unsqueeze(1), y_input_data))  # last step vs horizon=1
                 print(f"  Predictor_T loss: {p_loss.item()}")
                 p_loss.backward()
                 optimizer_PT.step()
                 print("  Predictor_T updated")
 
-                ps = predictor_S(input_data, self.edge_index_sets)
+                ps = predictor_S(input_data, self.edge_index_sets)  # typically (B, 1, C)
                 ps_loss = torch.mean(self.criterion(ps, y_input_data))
                 print(f"  Predictor_S loss: {ps_loss.item()}")
                 ps_loss.backward()
                 optimizer_PS.step()
                 print("  Predictor_S updated")
 
-                real_input = y_input_data
-                real_validity = discriminator(real_input)
-                fake_validity = discriminator(fake_input)
+                # -------------------------
+                #  GAN wiring (window-level)
+                # -------------------------
+                # Real window as (B, C, W)
+                real_input = input_data.permute(0, 2, 1).contiguous()
+
+                # Latent noise for Generator: (B, latent_dim)
+                z = torch.randn(input_data.size(0), self.latent_dim, device=self.device)
+                print("  Generated z for generator (using real window)")
+
+                # Forward G and D
+                fake_input = generator(z)                 # (B, C, W)
+                real_validity = discriminator(real_input) # (B, 1)
+                fake_validity = discriminator(fake_input) # (B, 1)
+
+                # WGAN-GP discriminator loss
                 gradient_penalty = compute_gradient_penalty(discriminator, real_input, fake_input)
                 d_loss = -torch.mean(real_validity) + torch.mean(fake_validity) + gradient_penalty
                 print(f"  Discriminator loss: {d_loss.item()}")
@@ -164,19 +201,20 @@ class Solver(object):
                 optimizer_D.step()
                 print("  Discriminator updated")
 
+                # Generator step
                 optimizer_G.zero_grad()
-                if i % 1 == 0:
-                    fake_input = generator(z)
-                    fake_validity = discriminator(fake_input)
-                    g_loss = -torch.mean(fake_validity)
-                    print(f"  Generator loss: {g_loss.item()}")
-                    g_loss.backward()
-                    optimizer_G.step()
-                    print("  Generator updated")
+                fake_input = generator(z)
+                fake_validity = discriminator(fake_input)
+                g_loss = -torch.mean(fake_validity)
+                print(f"  Generator loss: {g_loss.item()}")
+                g_loss.backward()
+                optimizer_G.step()
+                print("  Generator updated")
 
-                    rec_loss = torch.mean(self.criterion(fake_input, real_input))
-                    rec_losses.append(rec_loss.detach().cpu().numpy())
-                    print(f"  Reconstruction loss: {rec_loss.item()}")
+                # Reconstruction monitor for logging (window-level)
+                rec_loss = torch.mean(self.criterion(fake_input, real_input))
+                rec_losses.append(rec_loss.detach().cpu().numpy())
+                print(f"  Reconstruction loss (window): {rec_loss.item()}")
 
                 p_losses.append(p_loss.detach().cpu().numpy())
                 ps_losses.append(ps_loss.detach().cpu().numpy())
@@ -239,33 +277,43 @@ class Solver(object):
         d_energy = []
 
         for i, (input_data, y_input_data) in enumerate(self.test_loader):
+            # input_data: (B, W, C), y_input_data: (B, 1, C)
             input_data = input_data.float().to(self.device)
             y_input_data = y_input_data.float().to(self.device)
 
-            z = torch.FloatTensor(np.random.normal(0, 1, (y_input_data.shape[0], y_input_data.shape[1], y_input_data.shape[2]))).to(self.device)
-            z = z + y_input_data
-
+            # ----- Generator/Discriminator on full window -----
+            real_input = input_data.permute(0, 2, 1).contiguous()  # (B, C, W)
+            z = torch.randn(input_data.size(0), self.latent_dim, device=self.device)
             fake_input = self.G(z)
-            g_loss = criterion(y_input_data, fake_input)
 
-            p = self.L(input_data)
-            p_loss = criterion(p, y_input_data)
+            # Window reconstruction error -> per-channel scalar, then reshape to (B,1,C)
+            g_loss = torch.mean(criterion(real_input, fake_input), dim=2).unsqueeze(1)  # (B, 1, C)
 
-            ps = self.GDN(input_data, self.edge_index_sets)
-            ps_loss = criterion(ps, y_input_data)
+            # Discriminator score -> convert to positive loss-like signal, reshape to (B,1,C)
+            d_score = self.D(real_input)  # (B, 1)
+            d_loss = (-d_score + 1.0).unsqueeze(-1).expand(-1, 1, self.input_c)  # (B, 1, C)
 
-            d_loss = ((self.D(y_input_data)) * (-1) + 1)
+            # ----- Predictors (keep shapes consistent with training) -----
+            input_data_lstm = input_data.transpose(0, 1)  # (W, B, C)
+            p = self.L(input_data_lstm)                   # (W, B, C)
+            p_loss = criterion(p[-1].unsqueeze(1), y_input_data)  # (B, 1, C)
 
+            ps = self.GDN(input_data, self.edge_index_sets)        # (B, 1, C)
+            ps_loss = criterion(ps, y_input_data)                  # (B, 1, C)
+
+            # ----- Combine (per original weighting) -----
             loss = self.alpha * ps_loss + (1 - self.alpha) * p_loss + self.beta * g_loss + (1 - self.beta) * d_loss
-            loss = torch.mean(loss, dim=1)
-            p_loss = torch.mean(p_loss, dim=1)
-            p_loss = torch.mean(p_loss, dim=-1)
-            ps_loss = torch.mean(ps_loss, dim=1)
-            ps_loss = torch.mean(ps_loss, dim=-1)
-            d_loss = torch.mean(torch.mean(d_loss, dim=1), dim=-1)
-            g_loss = torch.mean(torch.mean(g_loss, dim=1), dim=-1)
+            loss = torch.mean(loss, dim=1)                 # (B, C)
 
-            win_loss = torch.mean(loss, dim=-1)
+            # Reduce per-component for logging
+            p_loss = torch.mean(p_loss, dim=1)             # (B, C)
+            p_loss = torch.mean(p_loss, dim=-1)            # (B,)
+            ps_loss = torch.mean(ps_loss, dim=1)           # (B, C)
+            ps_loss = torch.mean(ps_loss, dim=-1)          # (B,)
+            d_loss = torch.mean(torch.mean(d_loss, dim=1), dim=-1)  # (B,)
+            g_loss = torch.mean(torch.mean(g_loss, dim=1), dim=-1)  # (B,)
+
+            win_loss = torch.mean(loss, dim=-1)            # (B,)
 
             test_energy.append(win_loss.detach().cpu().numpy())
             p_energy.append(p_loss.detach().cpu().numpy())

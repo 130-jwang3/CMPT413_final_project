@@ -3,11 +3,8 @@ api_keys.yaml
 
 # big / generated data & models
 data/
-Datasets/
 output/
 log/
-BigModel/
-Models/
 LMM_test/
 SOTA/
 

@@ -1,14 +1,15 @@
-import yaml
 import os
 import re
+import yaml
 import numpy as np
+import matplotlib.pyplot as plt
+
+import torch
 from Models.Solver import Solver
 from Models.EHGAMEGAN import Generator
 from utils.data_loader import get_loader_segment
-import torch
-import matplotlib.pyplot as plt
 from tabulate import tabulate
-from sklearn.metrics import auc, roc_curve, roc_auc_score
+from sklearn.metrics import auc
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -36,11 +37,10 @@ The format of dataset.yaml:
 '''
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT_PATH = os.path.join(os.path.dirname(CURRENT_PATH), 'data')   # ../data
-DEFAULT_YAML_PATH = os.path.join(CURRENT_PATH, 'dataset.yaml')  # ./dataset.yaml
-'''
-Tools: Register the dataset
-'''
-def AutoRegister(root_path:str=DEFAULT_ROOT_PATH, yaml_path:str=DEFAULT_YAML_PATH):
+DEFAULT_YAML_PATH = os.path.join(CURRENT_PATH, 'dataset.yaml')            # ./dataset.yaml
+
+
+def AutoRegister(root_path: str = DEFAULT_ROOT_PATH, yaml_path: str = DEFAULT_YAML_PATH):
     dataset_map = {}
     for dataset_name in os.listdir(root_path):
         dataset_path = os.path.join(root_path, dataset_name)
@@ -111,10 +111,8 @@ def AutoRegister(root_path:str=DEFAULT_ROOT_PATH, yaml_path:str=DEFAULT_YAML_PAT
     with open(yaml_path, 'w') as f:
         yaml.dump(dataset_map, f)
 
-'''
-Tools: check dataset shape
-'''
-def check_shape(dataset_name:str, root_path:str=DEFAULT_ROOT_PATH):
+
+def check_shape(dataset_name: str, root_path: str = DEFAULT_ROOT_PATH):
     dataset_path = os.path.join(root_path, dataset_name)
     if not os.path.exists(dataset_path):
         raise FileNotFoundError(f"Dataset {dataset_name} not found in {root_path}")
@@ -126,12 +124,10 @@ def check_shape(dataset_name:str, root_path:str=DEFAULT_ROOT_PATH):
     for i in shape_map:
         print(i, shape_map[i])
 
-'''
-Info: Base Class. Convert the data to the format that the model can use
-'''
+
 class ConvertorBase:
     output_type = 'index'
-    def __init__(self, save_path:str):
+    def __init__(self, save_path: str):
         self.save_path = save_path
         self.normal_save_path = os.path.join(self.save_path, 'normal')
         self.abnormal_save_path = os.path.join(self.save_path, 'abnormal')
@@ -144,20 +140,19 @@ class ConvertorBase:
         if not os.path.exists(self.abnormal_save_path):
             os.makedirs(self.abnormal_save_path)
 
-    def convert_and_save(self, data, name:str):
+    def convert_and_save(self, data, name: str):
         return data
-    def load(self, idx:int)->dict:
+    def load(self, idx: int) -> dict:
         res = {
             'type': 'index',
             'data': idx,
         }
         return res
-'''
-Info: Convert time series data to image
-'''
+
+
 class ImageConvertor(ConvertorBase):
     output_type = 'image'
-    def __init__(self, save_path:str):
+    def __init__(self, save_path: str):
         super().__init__(save_path)
         self.width = 1500
         self.height = 320
@@ -171,7 +166,7 @@ class ImageConvertor(ConvertorBase):
         # convert to inches
         self.figsize = (self.width/self.dpi, self.height/self.dpi)
 
-    def set_config(self, width:int, height:int, dpi:int, x_ticks:int, aux_enable:bool):
+    def set_config(self, width: int, height: int, dpi: int, x_ticks: int, aux_enable: bool):
         self.width = width
         self.height = height
         self.dpi = dpi
@@ -220,7 +215,6 @@ class ImageConvertor(ConvertorBase):
 
         # Adjust layout and save the figure
         fig.tight_layout(pad=0.1)
-        # ax.view_init(90, 90)  # rotation
         if separate == 'normal':
             fig.savefig(os.path.join(self.normal_save_path, f"{name}.png"), bbox_inches='tight')
         elif separate == 'abnormal':
@@ -229,19 +223,18 @@ class ImageConvertor(ConvertorBase):
             fig.savefig(os.path.join(self.save_path, f"{name}.png"), bbox_inches='tight')
         plt.close()
 
-    def load(self, name:int):
+    def load(self, name: int):
         image_path = os.path.join(self.save_path, f"{name}.png")
         res = {
             'type': 'image',
             'data': image_path
         }
         return res
-'''
-Info: Convert time series data to text
-'''
+
+
 class TextConvertor(ConvertorBase):
     output_type = 'text'
-    def __init__(self, save_path:str):
+    def __init__(self, save_path: str):
         super().__init__(save_path)
     def convert_and_save(self, data, name: int, separate: str = '', reconstructed_data=None):
         with open(os.path.join(self.save_path, f"{name}.txt"), 'w') as f:
@@ -270,7 +263,7 @@ class TextConvertor(ConvertorBase):
             if reconstructed_data is not None:
                 f.write("\nReconstructed Data:\n")
                 f.write(formatted_reconstructed + "\n")
-    def load(self, name:int):
+    def load(self, name: int):
         text_path = os.path.join(self.save_path, f"{name}.txt")
         res = {
             'type': 'text',
@@ -292,9 +285,8 @@ class TextConvertor(ConvertorBase):
         formatted_data = ','.join(format_data_list)
         formatted_data = formatted_data.replace('\n', '')
         return formatted_data
-'''
-Utils
-'''
+
+
 # padding with nan
 def padding(array, target_len):
     current_len = array.shape[0]
@@ -305,18 +297,17 @@ def padding(array, target_len):
         padding_len = target_len - current_len
         padding_array = np.full((padding_len, channels), np.nan)
         return np.concatenate((array, padding_array), axis=0)
+
 # remove nan padding
 def remove_padding(array):
     if len(array.shape) == 1:
         return array[~np.isnan(array)]
     else:
         return array[~np.isnan(array).all(axis=1)]
-'''
-Raw Data Loader
-'''
+
 
 class RawDataset:
-    def __init__(self, dataset_name:str, sample_rate:float=1, normalization_enable:bool=True, yaml_path:str=DEFAULT_YAML_PATH) -> None:
+    def __init__(self, dataset_name: str, sample_rate: float = 1, normalization_enable: bool = True, yaml_path: str = DEFAULT_YAML_PATH) -> None:
         self.dataset_name = dataset_name
         self.yaml_path = yaml_path
         dataset_map = yaml.safe_load(open(self.yaml_path, 'r'))
@@ -328,8 +319,8 @@ class RawDataset:
 
     def get_background_info(self):
         return str(self.dataset_info['background'])
-    
-    def ensure_dir(self, path:str):
+
+    def ensure_dir(self, path: str):
         if not os.path.exists(path):
             os.makedirs(path)
 
@@ -351,8 +342,15 @@ class RawDataset:
 
         # Use the new dataloader to get data
         print("Loading train and test data...")
-        dataset, train_loader = get_loader_segment(base_data_dir, batch_size=32, win_size=window_size, step=stride, mode='train', dataset='SMD', horizon=1)
-        _, test_loader = get_loader_segment(base_data_dir, batch_size=32, win_size=window_size, step=stride, mode='test', dataset='SMD', horizon=1)
+        dataset_name_for_loader = self.dataset_name  # e.g., 'UCR'
+        dataset, train_loader = get_loader_segment(
+            base_data_dir, batch_size=32, win_size=window_size, step=stride,
+            mode='train', dataset=dataset_name_for_loader, horizon=1
+        )
+        _, test_loader = get_loader_segment(
+            base_data_dir, batch_size=32, win_size=window_size, step=stride,
+            mode='test', dataset=dataset_name_for_loader, horizon=1
+        )
         print(f"Train loader created with {len(train_loader)} batches")
         print(f"Test loader created with {len(test_loader)} batches")
 
@@ -425,15 +423,29 @@ class RawDataset:
 
         window_idx = 0  # Global window index across all batches
         for i, (window_data, _) in enumerate(test_loader):
-            if i % 10 == 0:  # Print progress every 10 batches
-                print(f"Processing batch {i+1}/{total_batches} ({(i+1)/total_batches*100:.1f}%)")
-            window_data = window_data.numpy()  # (batch_size, win_size, input_c)
-            batch_num_windows = window_data.shape[0]  # Number of windows in this batch
-            window_data_array.append(window_data)
-            input_tensor = torch.FloatTensor(window_data).to(device)  # (batch_size, win_size, input_c)
-            z = torch.FloatTensor(np.random.normal(0, 1, input_tensor.shape)).to(device) + input_tensor
+            if i % 10 == 0:
+                print(f"Processing batch {i + 1}/{total_batches} ({(i + 1) / total_batches * 100:.1f}%)")
+
+            # Ensure (B, W, C). Your loader gives (B, W) so add a channel dim.
+            if window_data.dim() == 2:
+                window_data = window_data.unsqueeze(-1)  # (B, W, 1)
+
+            batch_num_windows = window_data.shape[0]
+
+            # Keep a numpy copy for saving later
+            window_data_array.append(window_data.cpu().numpy())  # (B, W, C)
+
+            # Work in torch for the model
+            input_tensor = window_data.to(device=device, dtype=torch.float32)  # (B, W, C)
+
+            # Sample latent noise for the Generator: (B, latent_dim)
+            B = input_tensor.shape[0]
+            z = torch.randn(B, config['latent_dim'], device=device, dtype=torch.float32)
+
             with torch.no_grad():
-                reconstructed = generator(z).cpu().numpy()  # (batch_size, win_size, input_c)
+                gen_out = generator(z)  # (B, C, W)
+                reconstructed = gen_out.permute(0, 2, 1)  # -> (B, W, C) for saving
+                reconstructed = reconstructed.detach().cpu().numpy()
             reconstructed_data_array.append(reconstructed)
 
             # Load corresponding labels for each window in the batch
@@ -530,13 +542,13 @@ class RawDataset:
         print("separate_label_make completed successfully")
         return separate_id_list
 
-    def make(self, dataset_output_dir, id, mode, window_size, stride, convertor_class, image_config:dict={}, drop_last:bool=True):
+    def make(self, dataset_output_dir, id, mode, window_size, stride, convertor_class, image_config: dict = {}, drop_last: bool = True):
         # check data_path
         if id == 'data':
             data_path = os.path.join(self.dataset_info['path'], f"{mode}.npy")
         else:
             data_path = os.path.join(self.dataset_info['path'], f"{id}_{mode}.npy")
-        
+
         # 1. sampling & normalization
         data = np.load(data_path)
         data = self.sampling(data)
@@ -563,14 +575,14 @@ class RawDataset:
             window_data_array.append(window_data)
             # convert & save
             for ch in range(data_channels):
-                convertor.convert_and_save(window_data[:,ch], f'{i}-{ch}')
+                convertor.convert_and_save(window_data[:, ch], f'{i}-{ch}')
         if not drop_last:
             start = num_stride * stride
             window_data = data[start:]
             padded_window_data = padding(window_data, window_size)
             window_data_array.append(padded_window_data)
             for ch in range(data_channels):
-                convertor.convert_and_save(window_data[:,ch], f'{num_stride}-{ch}')
+                convertor.convert_and_save(window_data[:, ch], f'{num_stride}-{ch}')
 
         window_data_array = np.array(window_data_array)
         np.save(window_data_save_path, window_data_array)
@@ -581,7 +593,7 @@ class RawDataset:
                 labels_path = os.path.join(self.dataset_info['path'], f"labels.npy")
             else:
                 labels_path = os.path.join(self.dataset_info['path'], f"{id}_labels.npy")
-            # sampling 
+            # sampling
             labels = np.load(labels_path)
             labels = self.sampling(labels)
             # label .npy format: [num_stride, window_size, label_channels]
@@ -605,11 +617,12 @@ class RawDataset:
         background_save_path = os.path.join(dataset_output_dir, 'background.txt')
         with open(background_save_path, 'w') as f:
             f.write(self.get_background_info())
+
     '''
     output directory: "output_dir/dataset_name/id/name/convertor_type"
     '''
-    def convert_data(self, output_dir:str, mode:str, window_size:int, stride:int, convertor_class:ConvertorBase, 
-                     image_config:dict={}, drop_last:bool=True, data_id_list:list=[]):
+    def convert_data(self, output_dir: str, mode: str, window_size: int, stride: int, convertor_class: ConvertorBase,
+                     image_config: dict = {}, drop_last: bool = True, data_id_list: list = []):
         data_id_list = [] if data_id_list == [''] else data_id_list
         dataset_output_dir = os.path.join(output_dir, self.dataset_name)
         self.ensure_dir(dataset_output_dir)
@@ -622,23 +635,19 @@ class RawDataset:
         structure = {}
         for id in id_list:
             id = str(id)
-            # print(f'id: {id}')
-            # self.make(dataset_output_dir, id, mode, window_size, stride, convertor_class, image_config=image_config, drop_last=drop_last)
             id_idx_list = self.separate_label_make(dataset_output_dir, id, mode, window_size, stride, convertor_class, image_config=image_config, drop_last=drop_last)
             structure[id] = id_idx_list
         with open(os.path.join(dataset_output_dir, f"{mode}_structure.yaml"), 'w') as f:
             yaml.dump(structure, f)
-        
 
-'''
-Proccessed Data Loader
-'''
+
+DEFAULT_LOG_ROOT = os.path.join(os.path.dirname(CURRENT_PATH), 'log')
+
+
 class ProcessedDataset:
-    def __init__(self, dataset_path:str, mode:str='train'):
+    def __init__(self, dataset_path: str, mode: str = 'train'):
         self.dataset_path = dataset_path
-        # print(f"Dataset Path: {dataset_path}");exit()
         self.id_list = list(filter(lambda x: os.path.isdir(os.path.join(dataset_path, x)), os.listdir(dataset_path)))
-        # print(f"ID List: {self.id_list}")
         self.id_list.sort()
         self.background = open(os.path.join(dataset_path, 'background.txt'), 'r').read()
         self.mode = mode
@@ -648,7 +657,7 @@ class ProcessedDataset:
     def get_id_list(self):
         return self.id_list
 
-    def get_instances(self, balanced:bool=True, ratio:float=0.5,refined:bool=False):
+    def get_instances(self, balanced: bool = True, ratio: float = 0.5, refined: bool = False):
         import yaml
         import random
         structure = yaml.safe_load(open(os.path.join(self.dataset_path, f"{self.mode}_structure.yaml"), 'r'))
@@ -695,7 +704,7 @@ class ProcessedDataset:
         if self.background == '':
             self.background = 'No background information'
         return self.background
-    
+
     def count_data_num(self):
         self.data_id_info = {}
         self.total_data_num = 0
@@ -737,7 +746,7 @@ class ProcessedDataset:
 
     def get_total_data_num(self):
         return self.total_data_num
-    
+
     def get_data_id_info(self, data_id):
         labels = self.load_labels(data_id)
         data = self.load_data(data_id)
@@ -747,77 +756,57 @@ class ProcessedDataset:
             'label_channels': labels.shape[2],  # Labels are guaranteed to be 3D after load_labels
             'window_size': data.shape[1]
         }
-    
+
     def load_labels(self, data_id):
         """
         Load the labels for a given data_id from the labels.npy file.
         Ensures that the labels array is 3D by adding a singleton channel dimension if necessary.
-        
-        Args:
-            data_id (str): The identifier for the data (e.g., 'machine-1-1').
-        
-        Returns:
-            np.ndarray: The labels array with shape (num_strides, window_size, label_channels).
         """
         if data_id in self.labels_cache:
             return self.labels_cache[data_id]
-        
+
         label_path = os.path.join(self.dataset_path, data_id, self.mode, 'labels.npy')
         if not os.path.exists(label_path):
             raise FileNotFoundError(f"Labels file not found at {label_path} for data_id {data_id}")
-        
+
         labels = np.load(label_path)
         print(f"Loaded labels for {data_id} with shape: {labels.shape}")
-        
+
         # Ensure labels are 3D by adding a singleton channel dimension if necessary
         if labels.ndim == 2:  # Shape: (num_strides, window_size)
             labels = labels[:, :, np.newaxis]  # Shape: (num_strides, window_size, 1)
             print(f"Added singleton channel dimension, new shape: {labels.shape}")
         elif labels.ndim != 3:
             raise ValueError(f"Unexpected label shape {labels.shape} for data_id {data_id}. Expected 2D or 3D array.")
-        
+
         self.labels_cache[data_id] = labels
         return labels
-    
+
     def load_data(self, data_id):
         """
         Load the data for a given data_id from the data.npy file.
-        
-        Args:
-            data_id (str): The identifier for the data (e.g., 'machine-1-1').
-        
-        Returns:
-            np.ndarray: The data array with shape (num_strides, window_size, data_channels).
         """
         data_path = os.path.join(self.dataset_path, data_id, self.mode, 'data.npy')
         if not os.path.exists(data_path):
             raise FileNotFoundError(f"Data file not found at {data_path} for data_id {data_id}")
         return np.load(data_path)
-    
+
     def get_label_channel(self, data_id, data_ch):
         """
         Map a data channel to a label channel.
-        
-        Args:
-            data_id (str): The identifier for the data.
-            data_ch (int): The data channel index.
-        
-        Returns:
-            int: The corresponding label channel index.
         """
         data_info = self.get_data_id_info(data_id)
         label_channels = data_info['label_channels']
         if label_channels == 1:
             return 0  # Only one label channel, so always return 0
-        # Add logic for multi-channel labels if needed
         return data_ch % label_channels  # Example mapping
-    
+
     # TODO: 后续可以优化读取的次数，提升运行速度
     def get_data(self, data_id, num_stride, ch):
         data_path = os.path.join(self.dataset_path, data_id, self.mode, 'data.npy')
         data = np.load(data_path)
         return remove_padding(data[num_stride, :, ch])
-    
+
     def get_image(self, data_id, num_stride, ch):
         base_path = os.path.join(self.dataset_path, data_id, self.mode, 'image')
         image_name = f'{num_stride}-{ch}.png'
@@ -834,7 +823,7 @@ class ProcessedDataset:
         if os.path.exists(image_path):
             return image_path
         raise FileNotFoundError(f"Image {image_name} not found in normal, abnormal, or base image directory for data_id {data_id}")
-        
+
     def get_text(self, data_id, num_stride, ch):
         text_path = os.path.join(self.dataset_path, data_id, self.mode, 'text', f'{num_stride}-{ch}.txt')
         return text_path
@@ -845,13 +834,10 @@ class ProcessedDataset:
         labels = self.load_labels(data_id)  # Shape: (num_strides, window_size, label_channels)
         # Since load_labels ensures labels is 3D, we can directly index with label_ch
         return remove_padding(labels[num_stride, :, label_ch])
-'''
-Dataset loader for Evaluation
-'''
-DEFAULT_LOG_ROOT = os.path.join(os.path.dirname(CURRENT_PATH), 'log')
-# DEFAULT_PROCESSED_DATA_ROOT = os.path.join(os.path.dirname(CURRENT_PATH), 'output')
+
+
 class EvalDataLoader:
-    def __init__(self, dataset_name:str, processed_data_root:str, log_root:str=DEFAULT_LOG_ROOT):
+    def __init__(self, dataset_name: str, processed_data_root: str, log_root: str = DEFAULT_LOG_ROOT):
         self.dataset_info = yaml.safe_load(open(DEFAULT_YAML_PATH, 'r'))[dataset_name]
         self.dataset_name = dataset_name
         self.log_root = log_root
@@ -861,7 +847,7 @@ class EvalDataLoader:
         self.eval_image_path = os.path.join(log_root, f'{dataset_name}_image')
         if not os.path.exists(self.eval_image_path):
             os.makedirs(self.eval_image_path)
-        # load 
+        # load
         self.output_log = yaml.safe_load(open(self.log_file_path, 'r'))
         self.plot_default_config = {
             'width': 1024,
@@ -870,18 +856,16 @@ class EvalDataLoader:
             'x_ticks': 100,
         }
 
-    def label_to_list(self, info:str):
+    def label_to_list(self, info: str):
         if info == '[]':
             return []
         else:
             return list(map(int, info.strip('[]').split(',')))
-        
-    def abnormal_index_to_range(self, info:str):
+
+    def abnormal_index_to_range(self, info: str):
         # (start, end)/confidence/abnormal_type
         pattern_range = r'\(\d+,\s\d+\)/\d/[a-z]+'
         pattern_single = r'\(\d+\)/\d/[a-z]+'
-        # pattern_range = r'\(\d+,\s\d+\)/\d'
-        # pattern_single = r'\(\d+\)/\d'
         if info == '[]':
             return [[]]
         else:
@@ -902,10 +886,10 @@ class EvalDataLoader:
                 confidence = int(confidence)
                 single_point = int(single_point)
                 type_list.append(abnormal_type)
-                range_list.append((single_point,confidence))
+                range_list.append((single_point, confidence))
             return range_list
-        
-    def map_pred_window_index_to_global_index(self, window_index, offset:int=0):
+
+    def map_pred_window_index_to_global_index(self, window_index, offset: int = 0):
         global_index_set = set()
         for start_end_confidence in window_index:
             if isinstance(start_end_confidence, tuple) or isinstance(start_end_confidence, list):
@@ -930,8 +914,8 @@ class EvalDataLoader:
             else:
                 global_index_set.add(start_end_confidence+offset)
         return global_index_set
-    
-    def map_label_window_index_to_global_index(self, window_index, offset:int=0):
+
+    def map_label_window_index_to_global_index(self, window_index, offset: int = 0):
         global_index_set = set()
         for start_end in window_index:
             if isinstance(start_end, tuple) or isinstance(start_end, list):
@@ -953,8 +937,8 @@ class EvalDataLoader:
         global_index_set = list(global_index_set)
         global_index_set.sort()
         return global_index_set
-    
-    def map_pred_window_index_to_global_index_with_confidence(self, window_index, offset:int=0):
+
+    def map_pred_window_index_to_global_index_with_confidence(self, window_index, offset: int = 0):
         global_index_set = {confidence: set() for confidence in range(1, 5)}
         for start_end_confidence in window_index:
             if isinstance(start_end_confidence, tuple) or isinstance(start_end_confidence, list):
@@ -977,14 +961,13 @@ class EvalDataLoader:
                 else:
                     raise ValueError(f"Invalid abnormal index format: {start_end_confidence}")
             else:
-                # global_index_set[confidence].add(start_end_confidence+offset)
                 raise ValueError(f"Invalid abnormal index format: {start_end_confidence}")
         for confidence in global_index_set:
             global_index_set[confidence] = list(global_index_set[confidence])
             global_index_set[confidence].sort()
         return global_index_set
 
-    def set_plot_config(self, width:int, height:int, dpi:int, x_ticks:int, aux_enable:bool=False):
+    def set_plot_config(self, width: int, height: int, dpi: int, x_ticks: int, aux_enable: bool = False):
         plt.rcParams.update({'font.size': 8})
         self.plot_default_config['width'] = width
         self.plot_default_config['height'] = height
@@ -992,7 +975,6 @@ class EvalDataLoader:
         self.plot_default_config['x_ticks'] = x_ticks
 
     def get_fill_ranges(self, points, continue_thre=1):
-        # print(points)
         if points == []:
             return []
         start_idx = points[0]
@@ -1002,21 +984,14 @@ class EvalDataLoader:
                 fill_range_list.append((start_idx, points[i-1]+1))
                 start_idx = points[i]
         fill_range_list.append((start_idx, points[-1]+1))
-        # print(fill_range_list)
         return fill_range_list
 
-    def plot_figure(self, data, label, pred_points, image_name:str):
+    def plot_figure(self, data, label, pred_points, image_name: str):
         figsize = (self.plot_default_config['width']/self.plot_default_config['dpi'], self.plot_default_config['height']/self.plot_default_config['dpi'])
         fig, ax = plt.subplots(figsize=figsize, dpi=self.plot_default_config['dpi'])
         ax.plot(data, label='data')
 
         alpha = 0.2
-        # for point in pred:
-        #     ax.fill_between([point, point+0.6], np.min(data), np.max(data), color='green', alpha=alpha, label='pred' if point == pred[0] else '')
-        
-        # label_points = np.where(label == 1)[0]
-        # for point in label_points:
-        #     ax.fill_between([point, point+0.6], np.min(data), np.max(data), color='orange', alpha=alpha, label='label' if point == label_points[0] else '')
         pred_ranges = self.get_fill_ranges(pred_points)
         for start, end in pred_ranges:
             ax.fill_between(range(start, end), np.min(data), np.max(data), color='green', alpha=alpha, label='pred' if start == pred_ranges[0][0] else '')
@@ -1033,19 +1008,13 @@ class EvalDataLoader:
         fig.tight_layout(w_pad=0.1, h_pad=0)
         plt.savefig(os.path.join(self.eval_image_path, f"{image_name}.png"))
         plt.close()
-    
-    def plot_figure_with_confidence(self, data, label, pred_points:dict, image_name:str):
+
+    def plot_figure_with_confidence(self, data, label, pred_points: dict, image_name: str):
         figsize = (self.plot_default_config['width']/self.plot_default_config['dpi'], self.plot_default_config['height']/self.plot_default_config['dpi'])
         fig, ax = plt.subplots(figsize=figsize, dpi=self.plot_default_config['dpi'])
         ax.plot(data, label='data')
 
         alpha = 0.2
-        # for point in pred:
-        #     ax.fill_between([point, point+0.6], np.min(data), np.max(data), color='green', alpha=alpha, label='pred' if point == pred[0] else '')
-        
-        # label_points = np.where(label == 1)[0]
-        # for point in label_points:
-        #     ax.fill_between([point, point+0.6], np.min(data), np.max(data), color='orange', alpha=alpha, label='label' if point == label_points[0] else '')
         color_map = {1: 'gray', 2: 'blue', 3: 'yellow', 4: 'green'}
         for confidence in pred_points:
             pred_ranges = self.get_fill_ranges(pred_points[confidence])
@@ -1068,18 +1037,11 @@ class EvalDataLoader:
     def adjust_anomaly_detection_results(self, results, labels):
         """
         Adjust anomaly detection results based on the ground-truth labels.
-        
-        Args:
-            results (np.ndarray): The anomaly detection results (0 or 1).
-            labels (np.ndarray): The ground-truth labels (0 or 1).
-        
-        Returns:
-            np.ndarray: The adjusted anomaly detection results.
         """
         adjusted_results = results.copy()
         in_anomaly = False
         start_idx = 0
-        
+
         for i in range(len(labels)):
             if labels[i] == 1 and not in_anomaly:
                 in_anomaly = True
@@ -1088,13 +1050,13 @@ class EvalDataLoader:
                 in_anomaly = False
                 if np.any(results[start_idx:i] == 1):
                     adjusted_results[start_idx:i] = 1
-        
+
         # Handle the case where the last segment is an anomaly
         if in_anomaly and np.any(results[start_idx:] == 1):
             adjusted_results[start_idx:] = 1
         return adjusted_results
-    
-    def eval(self, window_size, stride, vote_thres:int, point_adjust_enable:bool=False, plot_enable:bool=False, channel_shared:bool=False):
+
+    def eval(self, window_size, stride, vote_thres: int, point_adjust_enable: bool = False, plot_enable: bool = False, channel_shared: bool = False):
         eval_logger = {}
         for data_id in self.output_log:
             data_id_info = self.processed_dataset.get_data_id_info(data_id)
@@ -1111,7 +1073,7 @@ class EvalDataLoader:
                 for stride_idx in range(num_stride):
                     if stride_idx not in self.output_log[data_id]:
                         continue
-                    if self.output_log[data_id][stride_idx]=={}:
+                    if self.output_log[data_id][stride_idx] == {}:
                         continue
                     item = self.output_log[data_id][stride_idx][ch]
                     labels = self.label_to_list(item['labels'])
@@ -1121,16 +1083,13 @@ class EvalDataLoader:
                     abnormal_index = self.abnormal_index_to_range(item['abnormal_index'])
                     abnormal_description = item['abnormal_description']
                     image_path = item['image']
-                    # confidence = int(item['confidence'])
-                    # if confidence <= 3:
-                    #     abnormal_index = []
                     # map to global index
                     offset = stride_idx * stride
                     abnormal_point_set = self.map_pred_window_index_to_global_index(abnormal_index, offset)
                     label_point_set = self.map_label_window_index_to_global_index(labels, offset)
-                    # mark point    
+                    # mark point
                     for label_point in label_point_set:
-                        if label_point < ch_global_label_array.shape[0]:    # 
+                        if label_point < ch_global_label_array.shape[0]:    #
                             ch_global_label_array[label_point, ch] = 1
                     for abnormal_point in abnormal_point_set:
                         if abnormal_point < ch_global_pred_array.shape[0]:
@@ -1140,9 +1099,8 @@ class EvalDataLoader:
                         plot_data = self.processed_dataset.get_data(data_id, stride_idx, ch)
                         plot_label = self.processed_dataset.get_label(data_id, stride_idx, ch)
                         plot_pred = self.map_pred_window_index_to_global_index_with_confidence(abnormal_index, 0)
-                        # print(plot_pred)
                         self.plot_figure_with_confidence(plot_data, plot_label, plot_pred, f"{data_id}_{stride_idx}_{ch}")
-                
+
                 # vote in channel
                 ch_global_pred_array[:, ch] = (ch_global_pred_array[:, ch] >= vote_thres).astype(int)
                 # adjust anomaly detection results
@@ -1153,7 +1111,6 @@ class EvalDataLoader:
             if channel_shared:
                 global_pred_array = np.sum(ch_global_pred_array, axis=1)
                 global_label_array = np.sum(ch_global_label_array, axis=1)
-                # print(global_pred_array.shape)
                 global_pred_array = (global_pred_array >= 1).astype(int)
                 global_label_array = (global_label_array >= 1).astype(int)
                 eval_logger[data_id] = {
@@ -1165,7 +1122,6 @@ class EvalDataLoader:
             else:
                 global_pred_array = ch_global_pred_array
                 global_label_array = ch_global_label_array
-                # print(global_pred_array.shape)
                 eval_logger[data_id] = {
                     'TP': 0,
                     'FP': 0,
@@ -1184,7 +1140,7 @@ class EvalDataLoader:
                 eval_logger[data_id]['FP'] /= data_channels
                 eval_logger[data_id]['TN'] /= data_channels
                 eval_logger[data_id]['FN'] /= data_channels
-                
+
         # all metrics
         TP = sum([eval_logger[data_id]['TP'] for data_id in eval_logger])
         FP = sum([eval_logger[data_id]['FP'] for data_id in eval_logger])
@@ -1197,11 +1153,9 @@ class EvalDataLoader:
         print(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
         print(f"Accuracy: {accuracy:.3f}, Precision: {precision:.3f}, Recall: {recall:.3f}, F1_score: {F1_score:.3f}")
 
-'''
-New version of evaluator
-'''
+
 class Evaluator:
-    def __init__(self, dataset_name:str, stride_length:int, processed_data_root:str, log_root:str=DEFAULT_LOG_ROOT, processed_path_name:str=''):
+    def __init__(self, dataset_name: str, stride_length: int, processed_data_root: str, log_root: str = DEFAULT_LOG_ROOT, processed_path_name: str = ''):
         self.dataset_name = dataset_name
         self.stride_length = stride_length
         self.processed_data_root = processed_data_root
@@ -1212,11 +1166,11 @@ class Evaluator:
         else:
             name = processed_path_name
         self.processed_dataset = ProcessedDataset(os.path.join(processed_data_root, name), mode='test')
-        
+
         log_file_path = os.path.join(log_root, f"{dataset_name}_log.yaml")
         self.load_log_file(log_file_path)
 
-    def get_ranges_from_points(self, point_list:list, continue_thres:int=1):
+    def get_ranges_from_points(self, point_list: list, continue_thres: int = 1):
         if point_list == []:
             return []
         start_idx = point_list[0]
@@ -1228,14 +1182,14 @@ class Evaluator:
         ranges_list.append((start_idx, point_list[-1]+1))
         return ranges_list
 
-    def decode_label(self, label:str):
+    def decode_label(self, label: str):
         if label == '[]':
             return []
         else:
-            label_point_list =  list(map(int, label.strip('[]').split(',')))
+            label_point_list = list(map(int, label.strip('[]').split(',')))
             return label_point_list
-    
-    def decode_abnormal_prediction(self, log_item:dict, channel:int, offset:int=0):
+
+    def decode_abnormal_prediction(self, log_item: dict, channel: int, offset: int = 0):
         pattern_range = r'\(\d+,\s\d+\)/\d/[a-z]+'
         pattern_single = r'\(\d+\)/\d/[a-z]+'
         abnormal_index = str(log_item['abnormal_index'])
@@ -1246,7 +1200,6 @@ class Evaluator:
             corrected_abnormal_index = double_check_index['corrected_abnormal_index']
         else:
             corrected_abnormal_index = '[]'
-        # corrected_abnormal_index = double_check_index.get('fixed_abnormal_index', '[]')
         output_dict = {
             'prediction': [],
             'double_check': [],
@@ -1277,7 +1230,7 @@ class Evaluator:
             pred = {
                 'channel': channel,
                 'start': single_point+offset,
-                'end': single_point+1+offset,  # range(single_pint, single_point+1) == [single_point]
+                'end': single_point+1+offset,  # range(single_point, single_point+1) == [single_point]
                 'confidence': confidence,
                 'type': abnormal_type,
             }
@@ -1307,25 +1260,20 @@ class Evaluator:
             pred = {
                 'channel': channel,
                 'start': single_point+offset,
-                'end': single_point+1+offset,  # range(single_pint, single_point+1) == [single_point]
+                'end': single_point+1+offset,
                 'confidence': confidence,
                 'type': abnormal_type,
             }
             output_dict['double_check'].append(pred)
-        # output:
-        # prediction: [{'start': int, 'end': int, 'confidence': int, 'type': str}, ...]
-        # double_check: [{'start': int, 'end': int, 'confidence': int, 'type': str}, ...]
         return output_dict
 
-    def load_log_file(self, log_file_path:str):
+    def load_log_file(self, log_file_path: str):
         self.raw_log = yaml.safe_load(open(log_file_path, 'r'))
         self.parsed_log = {}
         for data_id in self.raw_log:
             data_id_info = self.processed_dataset.get_data_id_info(data_id)
-            # print(data_id_info.keys())
             data_channels = data_id_info['data_channels']
             num_stride = data_id_info['num_stride']
-            # print(self.dataset_name, data_id)
             data_shape = self.dataset_info['file_list'][data_id]['test']
             # [globa_index, channel]
             self.parsed_log[data_id] = {}
@@ -1338,12 +1286,11 @@ class Evaluator:
                     offset = int(stride_idx * self.stride_length)
                     if stride_idx not in self.raw_log[data_id]:
                         continue
-                    # print(data_id, stride_idx, ch, self.raw_log[data_id].keys())
                     log_item = self.raw_log[data_id][stride_idx][ch]
                     # raw
                     raw_label = self.decode_label(log_item['labels'])
                     raw_data = self.processed_dataset.get_data(data_id, stride_idx, ch)
-                    # map to global 
+                    # map to global
                     for point in raw_label:
                         self.parsed_log[data_id]['label'][point+offset, ch] = 1
                     self.parsed_log[data_id]['raw_data'][offset:offset+len(raw_data), ch] = raw_data
@@ -1355,33 +1302,24 @@ class Evaluator:
                     self.parsed_log[data_id]['double_check'] += double_check_list
 
     @staticmethod
-    def point_adjustment(results, labels, thres_percentage:float=0.0):
+    def point_adjustment(results, labels, thres_percentage: float = 0.0):
         """
         Adjust anomaly detection results based on the ground-truth labels.
-        
-        Args:
-            results (np.ndarray): The anomaly detection results (0 or 1).
-            labels (np.ndarray): The ground-truth labels (0 or 1).
-        
-        Returns:
-            np.ndarray: The adjusted anomaly detection results.
         """
         adjusted_results = results.copy()
         in_anomaly = False
         start_idx = 0
-        
+
         for i in range(len(labels)):
             if labels[i] == 1 and not in_anomaly:
                 in_anomaly = True
                 start_idx = i
             elif labels[i] == 0 and in_anomaly:
                 in_anomaly = False
-                # if np.any(results[start_idx:i] == 1):
-                #     adjusted_results[start_idx:i] = 1
                 thres = (i - start_idx) * thres_percentage
                 if np.sum(results[start_idx:i]) > thres:    # threshold
                     adjusted_results[start_idx:i] = 1
-        
+
         # Handle the case where the last segment is an anomaly
         if in_anomaly and np.any(results[start_idx:] == 1):
             adjusted_results[start_idx:] = 1

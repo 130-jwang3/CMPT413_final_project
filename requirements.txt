@@ -13,3 +13,4 @@ matplotlib
 torch
 torch-geometric
 pyyaml
+python-dotenv
